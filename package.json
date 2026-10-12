@@ -1,0 +1,21 @@
+{
+  "name": "qasr-al-otoor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Qasr Al Otoor (قصر العطور) — Luxury Perfume E-Commerce Platform",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "keywords": ["perfume", "ecommerce", "nextjs", "express", "prisma", "arabic-rtl"],
+  "author": "Mohamed Ibrahim",
+  "license": "UNLICENSED"
+}
+

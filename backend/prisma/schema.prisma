@@ -1,0 +1,303 @@
+// Prisma Schema for Qasr Al Otoor (قصر العطور)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS
+}
+
+enum Gender {
+  UNISEX
+  MEN
+  WOMEN
+}
+
+enum ScentFamily {
+  ORIENTAL
+  WOODY
+  FLORAL
+  FRESH
+  CITRUS
+  SPICY
+  GOURMAND
+  AMBER
+  MUSK
+  OUD
+  AROMATIC
+  LEATHER
+}
+
+enum CodMode {
+  INHERIT
+  ENABLE
+  DISABLE
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PREPARING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  PAYMOB
+}
+
+model User {
+  id            String            @id @default(uuid())
+  fullName      String            @map("full_name")
+  email         String?           @unique
+  phone         String?           @unique
+  passwordHash  String?           @map("password_hash")
+  googleId      String?           @unique @map("google_id")
+  role          Role              @default(CUSTOMER)
+  verifiedAt    DateTime?         @map("verified_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  otpRequests   OtpVerification[]
+  orders        Order[]
+  carts         Cart[]
+
+  @@map("users")
+}
+
+model OtpVerification {
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  channel   OtpChannel
+  codeHash  String     @map("code_hash")
+  expiresAt DateTime   @map("expires_at")
+  attempts  Int        @default(0)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("otp_verifications")
+}
+
+model Category {
+  id              String    @id @default(uuid())
+  nameAr          String    @map("name_ar")
+  nameEn          String    @map("name_en")
+  slug            String    @unique
+  displayPosition Int       @default(0) @map("display_position")
+  published       Boolean   @default(true)
+  imageUrl        String?   @map("image_url")
+  description     String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  products        Product[]
+
+  @@index([displayPosition])
+  @@map("categories")
+}
+
+model Product {
+  id             String                @id @default(uuid())
+  sku            String                @unique
+  nameAr         String                @map("name_ar")
+  nameEn         String                @map("name_en")
+  brand          String                @default("قصر العطور")
+  descriptionAr  String                @map("description_ar")
+  descriptionEn  String?               @map("description_en")
+  scentNotes     String                @map("scent_notes") // Top, Heart, Base notes
+  gender         Gender                @default(UNISEX)
+  scentFamily    ScentFamily           @default(ORIENTAL) @map("scent_family")
+  categoryId     String                @map("category_id")
+  published      Boolean               @default(true)
+  archivedAt     DateTime?             @map("archived_at")
+  codMode        CodMode               @default(INHERIT) @map("cod_mode")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  category       Category              @relation(fields: [categoryId], references: [id])
+  variants       ProductVariant[]
+  images         ProductImage[]
+  discountCodes  DiscountCodeProduct[]
+
+  @@index([categoryId, published])
+  @@index([brand])
+  @@index([gender])
+  @@map("products")
+}
+
+model ProductVariant {
+  id            String      @id @default(uuid())
+  productId     String      @map("product_id")
+  sizeMl        Int         @map("size_ml")
+  priceEgp      Float       @map("price_egp")
+  stockQuantity Int         @default(0) @map("stock_quantity")
+  skuVariant    String?     @map("sku_variant")
+
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  r2Key     String   @map("r2_key")
+  imageUrl  String   @map("image_url")
+  position  Int      @default(1)
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model Cart {
+  id                  String     @id @default(uuid())
+  userId              String?    @map("user_id")
+  sessionId           String?    @unique @map("session_id")
+  appliedDiscountCode String?    @map("applied_discount_code")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+  expiresAt           DateTime   @map("expires_at")
+
+  user                User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items               CartItem[]
+
+  @@index([userId])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String         @id @default(uuid())
+  cartId    String         @map("cart_id")
+  variantId String         @map("variant_id")
+  quantity  Int            @default(1)
+
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, variantId])
+  @@map("cart_items")
+}
+
+model DiscountCode {
+  id         String                @id @default(uuid())
+  code       String                @unique // Uppercase alphanumeric
+  type       DiscountType
+  value      Float                 // Percentage (1-100) or Fixed EGP
+  startsAt   DateTime              @map("starts_at")
+  endsAt     DateTime              @map("ends_at")
+  usageLimit Int                   @default(100) @map("usage_limit")
+  timesUsed  Int                   @default(0) @map("times_used")
+  active     Boolean               @default(true)
+  createdAt  DateTime              @default(now()) @map("created_at")
+
+  products   DiscountCodeProduct[]
+
+  @@index([code])
+  @@map("discount_codes")
+}
+
+model DiscountCodeProduct {
+  discountCodeId String       @map("discount_code_id")
+  productId      String       @map("product_id")
+
+  discountCode   DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([discountCodeId, productId])
+  @@map("discount_code_products")
+}
+
+model Order {
+  id                 String               @id @default(uuid())
+  orderNumber        String               @unique @map("order_number")
+  userId             String               @map("user_id")
+  status             OrderStatus          @default(CONFIRMED)
+  paymentMethod      PaymentMethod        @map("payment_method")
+  subtotalEgp        Float                @map("subtotal_egp")
+  discountEgp        Float                @default(0) @map("discount_egp")
+  shippingFeeEgp     Float                @default(0) @map("shipping_fee_egp")
+  totalEgp           Float                @map("total_egp")
+  shippingAddress    Json                 @map("shipping_address") // { fullName, phone, governorate, city, addressDetails, notes }
+  paymobOrderId      String?              @map("paymob_order_id")
+  paymobTxnId        String?              @map("paymob_transaction_id")
+  codCollectedAt     DateTime?            @map("cod_collected_at")
+  notes              String?
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  user               User                 @relation(fields: [userId], references: [id])
+  items              OrderItem[]
+  statusHistory      OrderStatusHistory[]
+
+  @@index([userId, createdAt])
+  @@index([orderNumber])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String         @id @default(uuid())
+  orderId             String         @map("order_id")
+  variantId           String         @map("variant_id")
+  productNameSnapshot String         @map("product_name_snapshot")
+  sizeMlSnapshot      Int            @map("size_ml_snapshot")
+  unitPriceEgp        Float          @map("unit_price_egp")
+  quantity            Int
+
+  order               Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant             ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id         String       @id @default(uuid())
+  orderId    String       @map("order_id")
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus  @map("to_status")
+  changedBy  String       @map("changed_by") // admin user id or "system" or "customer"
+  notes      String?
+  changedAt  DateTime     @default(now()) @map("changed_at")
+
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_status_history")
+}
+
+model PaymentSettings {
+  id               String   @id @default("default")
+  codEnabledGlobal Boolean  @default(true) @map("cod_enabled_global")
+  codMaxOrderEgp   Float?   @map("cod_max_order_egp")
+  updatedBy        String?  @map("updated_by")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("payment_settings")
+}
+
